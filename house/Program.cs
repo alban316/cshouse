@@ -10,8 +10,8 @@ namespace house
     {
         public class Menu
         {
-            public enum VerbType { Quit, GoTo, Buy, Sell, Take };
-            public static string[] VerbMsg = { "Quit", "Go To", "Buy", "Sell", "Take" };
+            public enum VerbType { Quit, GoTo, Buy, Sell, Take, Leave };
+            public static string[] VerbMsg = { "Quit", "Go To", "Buy", "Sell", "Take", "Leave" };
             Dictionary<int, MenuItem> menu = new Dictionary<int, MenuItem>();
 
             public class MenuItem
@@ -26,7 +26,7 @@ namespace house
                 }
             }
 
-            public Menu(Room room)
+            public Menu(Room room, Player player)
             {
                 
                 // add quit option to menu
@@ -45,17 +45,14 @@ namespace house
                 {
                     if (!item.IsFixed)
                     {
-                        if (item.IsFree)
+                        if (room.IsMerchant)
                         {
-                            menu.Add(i, new MenuItem(VerbType.Take, item));
+                            menu.Add(i, new MenuItem(VerbType.Buy, item));
                         }
 
                         else
                         {
-                            if (room.IsMerchant)
-                            {
-                                menu.Add(i, new MenuItem(VerbType.Buy, item));
-                            }
+                            menu.Add(i, new MenuItem(VerbType.Take, item));
                         }
                     }
 
@@ -63,6 +60,98 @@ namespace house
                 }
 
                 // go through player backpack & add sell if applicable
+                foreach (Item item in player.Backpack)
+                {
+                    if (room.IsMerchant)
+                    {
+                        menu.Add(i, new MenuItem(VerbType.Sell, item));
+                    }
+
+                    else
+                    {
+                        menu.Add(i, new MenuItem(VerbType.Leave, item));
+                    }
+
+                    i++;
+                }
+            }
+
+            public bool ProcessInput(string input, Room room, Player player)
+            {
+                bool result = true;
+                bool invalid = false;
+
+                int response;
+                if (Int32.TryParse(input, out response))
+                {
+                    if (response <= menu.Count)
+                    {
+                        KeyValuePair<int, MenuItem> choice = menu.ElementAt(response - 1);
+                        switch (choice.Value.Verb)
+                        {
+                            case VerbType.Quit:
+                                result = false;
+                                break;
+                            case VerbType.Take:
+                                Item takeItem = (Item)choice.Value.Item;
+                                player.Backpack.Add(takeItem);
+                                room.Pickable.Remove(takeItem);
+                                break;
+                            case VerbType.Leave:
+                                Item leaveItem = (Item)choice.Value.Item;
+                                player.Backpack.Remove(leaveItem);
+                                room.Pickable.Add(leaveItem);
+                                break;
+                            case VerbType.GoTo:
+                                Room dest = (Room)choice.Value.Item;
+                                player.Location = dest;
+                                break;
+                            case VerbType.Sell:
+                                Item sellItem = (Item)choice.Value.Item;
+                                player.Cash += sellItem.Value;
+                                player.Backpack.Remove(sellItem);
+                                room.Pickable.Add(sellItem);
+                                break;
+                            case VerbType.Buy:
+                                Item buyItem = (Item)choice.Value.Item;
+                                if (player.Cash >= buyItem.Value)
+                                {
+                                    player.Cash -= buyItem.Value;
+                                    player.Backpack.Add(buyItem);
+                                    room.Pickable.Remove(buyItem);
+                                }
+
+                                else 
+                                {
+                                    Console.WriteLine("Sorry. You don't have enough cash. ");
+                                }
+
+                                break;
+
+                            default:
+                                invalid = true;
+                                break;
+
+                        }
+                    }
+
+                    else
+                    {
+                        invalid = true;
+                    }
+                }
+
+                else
+                {
+                    invalid = true;
+                }
+
+                if (invalid)
+                {
+                    Console.WriteLine("Sorry. That action is not available.");
+                }
+
+                return result;
             }
 
             public Dictionary<int, MenuItem> Value { get { return menu; } }
@@ -99,6 +188,12 @@ namespace house
             List<Item> backpack = new List<Item>();
             public Room Location { get; set; }
             public List<Item> Backpack { get { return backpack; } }
+            public int Cash { get; set; }
+
+            public Player()
+            {
+                Cash = 0;
+            }
         }
 
 
@@ -153,9 +248,7 @@ namespace house
             public string Description { get { return description; } }
             public List<Room> Navigable { get { return navigable; } }
             public List<Item> Pickable { get { return pickable; } }
-            public bool IsFree { get { return IsFree; } }
-            public bool IsFixed { get { return IsFixed; } }
-            public bool IsMerchant { get { return IsMerchant; } }
+            public bool IsMerchant { get { return isMerchant; } }
         }
 
         Room food, pawn, atrium, sports;
@@ -176,11 +269,12 @@ namespace house
             atrium.Navigable.Add(sports);
             pawn.Navigable.Add(atrium);
             food.Navigable.Add(atrium);
+            sports.Navigable.Add(atrium);
 
             //init items
             casio = new Item("Casio watch", 10, false, false);
             tree = new Item("Tree", 0, true, false);
-            frisbee = new Item("Frisbee", 5, false, true);
+            frisbee = new Item("Frisbee", 10, false, true);
 
             //add stuff to rooms
             atrium.Pickable.Add(frisbee);
@@ -242,7 +336,6 @@ namespace house
         public void ListBackpack(Player player)
         {
 
-
             if (player.Backpack.Count > 0)
             {
                 Console.Write("Items in your possession include: ");
@@ -254,8 +347,9 @@ namespace house
                 Console.Write("Your backpack is empty. ");
             }
 
-        }
 
+            Console.Write("You have ${0} cash. ", player.Cash);
+        }
 
         public static void ListDirections(Room room)
         {
@@ -307,32 +401,18 @@ namespace house
         public void RunGame()
         {
             // game loop
-            Room curRoom = player.Location;
-            Menu menu = new Menu(curRoom);
-
-            string response = "";
-            while (response != "quit")
+            bool run = true;
+            
+            while (run)
             {
-                ListAll(curRoom, player);
+                ListAll(player.Location, player);
 
                 Console.WriteLine("What do you want to do?");
+                Menu menu = new Menu(player.Location, player);
                 menu.Display();
-                response = Console.ReadLine();
+                string input = Console.ReadLine();
 
-                if (response != "quit")
-                {
-
-                    Room match = curRoom.Navigable.Find(item => item.Name == response);
-                    if (match != null)
-                    {
-                        curRoom = match;
-                    }
-
-                    else
-                    {
-                        Console.WriteLine("That direction is not available.");
-                    }
-                }
+                run = menu.ProcessInput(input, player.Location, player);
             }
         }
     }
