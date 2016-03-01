@@ -1,0 +1,6 @@
+C:\Users\jbrugger\repo\house\house\bin\Debug\house.exe.config
+C:\Users\jbrugger\repo\house\house\obj\Debug\house.csprojResolveAssemblyReference.cache
+C:\Users\jbrugger\repo\house\house\bin\Debug\house.exe
+C:\Users\jbrugger\repo\house\house\bin\Debug\house.pdb
+C:\Users\jbrugger\repo\house\house\obj\Debug\house.exe
+C:\Users\jbrugger\repo\house\house\obj\Debug\house.pdb
